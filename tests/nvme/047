@@ -1,0 +1,97 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Run a range of copy offload test using device copy offload,
+# for file backed ns
+
+. tests/nvme/rc
+
+DESCRIPTION="run copy offload (device offload) fio job on NVMeOF file-backed ns"
+TIMED=1
+
+requires() {
+	_nvme_requires
+	_have_fio
+	_require_nvme_trtype_is_fabrics
+}
+
+#Pre conditioning the device
+__precon_fio_copy() {
+	_run_fio_precon --filename="/dev/${nvmedev}n1" --io_size=${size}M \
+		--offset_increment=${offset_increment}M
+}
+
+#Run copy offload
+__run_fio_copy() {
+	_run_fio_copy --filename="/dev/${nvmedev}n1" --bs=${zbs} \
+		--io_size=${size}M \
+		--dest_offset_delta=${dest_offset_delta}M --numjobs=$numjobs \
+		--offset_increment=${offset_increment}M
+}
+
+#Verify the copied data
+__verify_fio_copy() {
+	if ! cmp "/dev/${nvmedev}n1" "/dev/${nvmedev}n1" \
+		--ignore-initial=0:${dest_offset}M --bytes=${verify_mib}M ; then
+			echo "comparison failed !!!!!!!!"
+	fi
+}
+
+run_copy_offload() {
+	local bs=(4096 2097152)
+	local numjobs=$([ "$(nproc)" -gt "32" ] && echo "32" || echo "$(nproc)")
+	local size=16
+	local dest_offset_delta=$(($size*$numjobs))
+	local offset_increment=$size
+	local dest_offset=$dest_offset_delta
+	local verify_mib=$(($size*$numjobs))
+
+	for zbs in "${bs[@]}"; do
+		__precon_fio_copy
+		__run_fio_copy
+		__verify_fio_copy
+	done
+}
+
+test() {
+	echo "Running ${TEST_NAME}"
+
+	_setup_nvmet
+
+	local port
+	local nvmedev
+	local file_path 
+	local file_path="${TMPDIR}/img"
+	local subsys_name="blktests-subsystem-1"
+
+	truncate -s 1G "${file_path}"
+
+	_create_nvmet_subsystem "${subsys_name}" "${file_path}" \
+		"91fdba0d-f87b-4c25-b80f-db7be1418b9e"
+	port="$(_create_nvmet_port "${nvme_trtype}")"
+	_add_nvmet_subsys_to_port "${port}" "${subsys_name}"
+
+	_nvme_connect_subsys "${nvme_trtype}" "${subsys_name}"
+
+	nvmedev=$(_find_nvme_dev "${subsys_name}")
+	cat "/sys/block/${nvmedev}n1/uuid"
+	cat "/sys/block/${nvmedev}n1/wwid"
+
+	if [ -e "/sys/block/${nvmedev}n1/queue/copy_offload" ]; then
+		echo 1 > "/sys/block/${nvmedev}n1/queue/copy_offload"
+		run_copy_offload
+	else
+		SKIP_REASONS+=("Kernel does not support copy offload")
+	fi
+
+	_nvme_disconnect_subsys "${subsys_name}"
+
+	_remove_nvmet_subsystem_from_port "${port}" "${subsys_name}"
+	_remove_nvmet_subsystem "${subsys_name}"
+	_remove_nvmet_port "${port}"
+
+	rm "${file_path}"
+
+	echo "Test complete"
+}
