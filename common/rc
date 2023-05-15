@@ -266,6 +266,25 @@ _test_dev_can_discard() {
 	[[ $(cat "${TEST_DEV_SYSFS}/queue/discard_max_bytes") -gt 0 ]]
 }
 
+_test_dev_can_copy_offload() {
+	[[ $(cat "${TEST_DEV_SYSFS}/queue/copy_max_bytes") -gt 0 ]]
+}
+
+_require_test_dev_can_copy_offload() {
+	if ! _test_dev_can_copy_offload; then
+		SKIP_REASONS+=("$TEST_DEV does not support copy offload")
+		return 1
+	fi
+	return 0
+}
+
+_have_copy_offload() {
+	if ! [ -e "${TEST_DEV_SYSFS}/queue/copy_offload" ]; then
+		SKIP_REASONS+=("kernel does not support copy offload")
+		return 1
+	fi
+}
+
 _require_test_dev_can_discard() {
 	if ! _test_dev_can_discard; then
 		SKIP_REASONS+=("$TEST_DEV does not support discard")
