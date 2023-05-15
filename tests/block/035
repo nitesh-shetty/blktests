@@ -1,0 +1,55 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Run a range of copy offload using block layer copy emulation
+
+. tests/block/rc
+
+DESCRIPTION="run various copy offload using block layer copy emulation"
+TIMED=1
+
+requires() {
+	_have_fio
+}
+
+device_requires() {
+	_have_copy_offload
+}
+
+test_device () {
+	local bs=(4096 2097152)
+	local numjobs=$([ "$(nproc)" -gt "32" ] && echo "32" || echo "$(nproc)")
+	local size=16
+	local dest_offset_delta=$(($size*$numjobs))
+	local offset_increment=$size
+	local dest_offset=$dest_offset_delta
+	local verify_mib=$(($size*$numjobs))
+
+	echo "Running ${TEST_NAME}"
+
+	_test_dev_queue_set copy_offload 0
+	for zbs in "${bs[@]}"; do
+		#Pre conditioning the device
+		_run_fio_precon --filename="$TEST_DEV" \
+			--io_size=${size}M \
+			--offset_increment=${offset_increment}M
+
+		#run copy offload
+		_run_fio_copy --filename=${TEST_DEV} --bs=${zbs} \
+			--io_size=${size}M \
+			--dest_offset_delta=${dest_offset_delta}M \
+			--numjobs=$numjobs \
+			--offset_increment=${offset_increment}M
+
+		#verify the copied data
+		output=$(cmp $TEST_DEV $TEST_DEV \
+				--ignore-initial=0:${dest_offset}M \
+				--bytes=${verify_mib}M)
+		if [ "$output" != "" ]
+		then
+			echo "comparison failed!!!!!!!!"
+		fi
+	done
+	echo "Test complete"
+}

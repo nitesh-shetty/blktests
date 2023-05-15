@@ -199,6 +199,16 @@ _run_fio_verify_io() {
 	rm -f local*verify*state
 }
 
+_run_fio_precon() {
+	_run_fio --name=precon --rw=write --direct=1 --ioengine=psync --bs=256k \
+		--numjobs=32 "$@"
+}
+
+_run_fio_copy() {
+	_run_fio --name=copy --rw=copy --direct=1 --ioengine=psync \
+	--iodepth=1 --emulate=0 "$@"
+}
+
 _fio_perf_report() {
 	# If there is more than one group, we don't know what to report.
 	if [[ $(wc -l < "$TMPDIR/fio_perf") -gt 1 ]]; then
