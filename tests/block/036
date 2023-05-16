@@ -1,0 +1,72 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Anuj Gupta
+#
+# Run a range of copy offload test using device copy offload,
+# for null-blk device
+
+. tests/block/rc
+. common/null_blk
+
+DESCRIPTION="run copy offload (device offload) fio job on null-blk device"
+TIMED=1
+
+requires() {
+	_have_null_blk && _have_module_param null_blk copy_max_bytes && _have_fio
+}
+
+#Pre conditioning the device
+__precon_fio_copy() {
+	_run_fio_precon --filename="/dev/nullb0" --io_size=${size}M \
+		--offset_increment=${offset_increment}M
+}
+
+#Run copy offload
+__run_fio_copy() {
+	_run_fio_copy --filename="/dev/nullb0" --bs=${zbs} \
+		--io_size=${size}M \
+		--dest_offset_delta=${dest_offset_delta}M --numjobs=$numjobs \
+		--offset_increment=${offset_increment}M
+}
+
+#Verify the copied data
+__verify_fio_copy() {
+	if ! cmp "/dev/nullb0" "/dev/nullb0" \
+		--ignore-initial=0:${dest_offset}M --bytes=${verify_mib}M ; then
+			echo "comparison failed !!!!!!!!"
+	fi
+}
+
+run_copy_offload() {
+	local bs=(4096 2097152)
+	local numjobs=$([ "$(nproc)" -gt "32" ] && echo "32" || echo "$(nproc)")
+	local size=16
+	local dest_offset_delta=$(($size*$numjobs))
+	local offset_increment=$size
+	local dest_offset=$dest_offset_delta
+	local verify_mib=$(($size*$numjobs))
+
+	for zbs in "${bs[@]}"; do
+		__precon_fio_copy
+		__run_fio_copy
+		__verify_fio_copy
+	done
+}
+
+test() {
+	echo "Running ${TEST_NAME}"
+
+	if ! _init_null_blk memory_backed=1; then
+		return 1
+	fi
+	if [ -e "/sys/block/nullb0/queue/copy_offload" ]; then
+		echo 1 > "/sys/block/nullb0/queue/copy_offload"
+		run_copy_offload
+	else
+		SKIP_REASONS+=("Kernel does not support copy offload")
+	fi
+
+	_exit_null_blk
+
+	echo "Test complete"
+}
