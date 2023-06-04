@@ -1,0 +1,49 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Check memory leak when null_blk driver is loaded with memory_backed=1
+
+. tests/block/rc
+. common/null_blk
+
+DESCRIPTION="run dd tests to check memory leak in null-blk memory_backed=1"
+TIMED=1
+
+requires() {
+	_have_null_blk && _have_module_param null_blk && _have_fio
+}
+
+run_nullblk_dd() {
+	if ! _init_null_blk memory_backed=1; then
+		echo "Loading null_blk failed"
+		return 1
+	fi
+	dd if=/dev/urandom of=/dev/nullb0 oflag=direct bs=1M count=$1 > /dev/null 2>&1
+	_exit_null_blk
+}
+
+free_memory() {
+	mem=$(sed -n 's/^MemFree:[[:blank:]]*\([0-9]*\)[[:blank:]]*kB$/\1/p' /proc/meminfo)
+	echo $mem
+}
+
+test() {
+	echo "Running ${TEST_NAME}"
+
+	mem_leak=0
+	size=100
+	for ((i = 0; i < 10; i++)); do
+		mem_start=$(free_memory)
+		run_nullblk_dd $size
+		mem_end=$(free_memory)
+		mem_used=$((((mem_start - mem_end)) / 1024))
+		if [ $mem_used -ge $((size - 10)) ]; then
+			mem_leak=$((mem_leak + 1))
+		fi
+	done
+	if [ $mem_leak -gt 5 ]; then
+		echo "Memleak: Memory is not freed by null-blk driver"
+	fi
+	echo "Test complete"
+}
