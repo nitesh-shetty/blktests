@@ -256,6 +256,25 @@ _test_dev_is_rotational() {
 	[[ $(cat "${TEST_DEV_SYSFS}/queue/rotational") -ne 0 ]]
 }
 
+_test_dev_can_copy_offload() {
+	[[ $(cat "${TEST_DEV_SYSFS}/queue/copy_max_hw_bytes") -gt 0 ]]
+}
+
+_require_test_dev_can_copy_offload() {
+	if ! _test_dev_can_copy_offload; then
+		SKIP_REASONS+=("$TEST_DEV does not support copy offload")
+		return 1
+	fi
+	return 0
+}
+
+_have_copy_offload() {
+	if ! [ -e "${TEST_DEV_SYSFS}/queue/copy_max_bytes" ]; then
+		SKIP_REASONS+=("kernel does not support copy offload")
+		return 1
+	fi
+}
+
 _require_test_dev_sysfs() {
 	if [[ ! -e "${TEST_DEV_SYSFS}/$1" ]]; then
 		SKIP_REASONS+=("${TEST_DEV} does not have sysfs attribute $1")
