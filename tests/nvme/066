@@ -1,0 +1,60 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Run single of copy offload IO using block layer emulation,
+# for file backed ns
+
+. tests/nvme/rc
+
+DESCRIPTION="run single copy offload (block layer emulation) IO on NVMeOF file-backed ns"
+TIMED=1
+
+requires() {
+	_nvme_requires
+	_have_fio
+	_require_nvme_trtype_is_fabrics
+}
+
+test() {
+	echo "Running ${TEST_NAME}"
+
+	_setup_nvmet
+
+	local port
+	local nvmedev
+	local file_path
+	local file_path="${TMPDIR}/img"
+	local subsys_name="blktests-subsystem-1"
+
+	truncate -s 1G "${file_path}"
+
+	_create_nvmet_subsystem "${subsys_name}" "${file_path}" \
+		"91fdba0d-f87b-4c25-b80f-db7be1418b9e"
+	port="$(_create_nvmet_port "${nvme_trtype}")"
+	_add_nvmet_subsys_to_port "${port}" "${subsys_name}"
+
+	_nvme_connect_subsys "${nvme_trtype}" "${subsys_name}"
+
+	nvmedev=$(_find_nvme_dev "${subsys_name}")
+	cat "/sys/block/${nvmedev}n1/uuid"
+	cat "/sys/block/${nvmedev}n1/wwid"
+
+	if [ -e "/sys/block/${nvmedev}n1/queue/copy_max_hw_bytes" ]; then
+		echo 0 > /sys/block/"${nvmedev}n1"/queue/copy_max_bytes
+		_fio_copy_verify_single_io "/dev/${nvmedev}n1" 4096 "nvme/nvme_setup_cmd"
+		_fio_copy_verify_single_io "/dev/${nvmedev}n1" 1048576
+	else
+		SKIP_REASONS+=("Kernel does not support copy offload")
+	fi
+
+	_nvme_disconnect_subsys "${subsys_name}"
+
+	_remove_nvmet_subsystem_from_port "${port}" "${subsys_name}"
+	_remove_nvmet_subsystem "${subsys_name}"
+	_remove_nvmet_port "${port}"
+
+	rm "${file_path}"
+
+	echo "Test complete"
+}
