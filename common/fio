@@ -217,3 +217,91 @@ _fio_perf_report() {
 		TEST_RUN["$FIO_PERF_PREFIX$name"]="$value"
 	done
 }
+
+#Pre conditioning the device
+_run_fio_precon() {
+	_run_fio --name=precon --rw=write --direct=1 --ioengine=psync --bs=256k \
+		--numjobs=32 "$@"
+}
+
+#Run copy offload
+_run_fio_copy() {
+	_run_fio --name=copy --rw=copy --direct=1 --ioengine=psync \
+	--iodepth=1 --emulate=0 "$@"
+}
+
+filter_trace() {
+	sed -r -e "/fio/!d" \
+		-e "/entries-in-buffer/d" \
+		-e "s/  +/ /g" \
+		-e "s/fio-[0-9]+/fio-XXXXX/" \
+		-e "/nvme_cmd_copy|COPY_SRC/!d" \
+		-e "s/nvme_cmd_copy|COPY_SRC/copy/" \
+		-e "s/\[[0-9]+\]/[XXX]/" \
+		-e "s/\.{5}\s+/.....    /" \
+		-e "s/[0-9]+\.[0-9]+/X.XXXXXX/" \
+		-e "s/nvme[a-z0-9-]+/nvme/" \
+		-e "s/disk=[a-zA-Z0-9-]+/disk=X/" \
+		-e "s/qid=[0-9-]+/qid=X/" \
+		-e "s/nsid=[0-9-]+/nsid=X/" \
+		-e "s/cmdid=[0-9-]+/cmdid=X/" \
+		-e "s/slba=[0-9-]+/slba=X/" \
+		-e "s/sdlba=[0-9-]+/sdlba=X/" \
+		-e "s/len=[0-9-]+/len=X/"
+}
+
+_fio_copy_verify_single_io() {
+	local output
+	local io_size=$2
+	local tfsinstance=/sys/kernel/debug/tracing/instances/blktests
+	local tr_enable=0
+
+	if (( $# == 3 )); then
+		tr_enable=1
+		mkdir "${tfsinstance}"
+	fi
+	_run_fio_precon --filename="$1" --io_size="$io_size" --offset_increment="$io_size"
+
+	if (( tr_enable )); then
+		echo 1 > "${tfsinstance}/events/$3/enable"
+	fi
+	_run_fio_copy --filename="$1" --bs="$io_size" --io_size="$io_size" --numjobs=1 \
+		--dest_offset_delta="$io_size" --offset_increment="$io_size"
+	if (( tr_enable )); then
+		echo 0 > "${tfsinstance}/events/$3/enable"
+	fi
+
+	#verify the copied data
+	output=$(cmp "$1" "$1" --bytes="$io_size" --ignore-initial=0:"$io_size")
+	if [ "$output" != "" ]; then
+		echo "comparison failed!!!!!!!!"
+	fi
+	if (( tr_enable )); then
+		filter_trace < "${tfsinstance}/trace"
+		rmdir "${tfsinstance}"
+	fi
+}
+
+_fio_copy_verify_multi_io() {
+	local bs=(4096 2097152)
+	local numjobs=$([ "$(nproc)" -gt "32" ] && echo "32" || echo "$(nproc)")
+	local size=16
+	local dest_offset_delta=$(($size*$numjobs))
+	local offset_increment=$size
+	local dest_offset=$dest_offset_delta
+	local verify_mib=$(($size*$numjobs))
+	local output
+
+	for zbs in "${bs[@]}"; do
+		_run_fio_precon --filename="$1" --io_size=${size}M \
+			--offset_increment=${offset_increment}M
+		_run_fio_copy --filename="$1" --bs=${zbs} \
+			--io_size=${size}M \
+			--dest_offset_delta=${dest_offset_delta}M --numjobs=$numjobs \
+			--offset_increment=${offset_increment}M
+		if ! cmp "$1" "$1" \
+			--ignore-initial=0:${dest_offset}M --bytes=${verify_mib}M ; then
+				echo "comparison failed !!!!!!!!"
+		fi
+	done
+}
