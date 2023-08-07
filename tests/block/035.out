@@ -1,0 +1,3 @@
+Running block/035
+ fio-XXXXX [XXX] .....    X.XXXXXX: nullb_copy_op: disk=X, req=copy : dst=4096, src=0, len=X
+Test complete
