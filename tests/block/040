@@ -1,0 +1,32 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Run a multi copy offload IO using emulation on a null block device
+
+. tests/block/rc
+. common/null_blk
+
+DESCRIPTION="run multi copy offload IO using emulation on null-blk"
+
+requires() {
+	_have_fio && _have_tracefs &&
+	_have_null_blk && _have_module_param null_blk copy_max_bytes && _have_fio
+}
+
+test () {
+	echo "Running ${TEST_NAME}"
+
+	if ! _init_null_blk memory_backed=1; then
+		return 1
+	fi
+	if ! _have_tracepoint "nullb/nullb_copy_op"; then
+		return 1
+	fi
+	echo 0 > /sys/block/nullb0/queue/copy_max_bytes
+	_fio_copy_verify_multi_io "/dev/nullb0"
+
+	_exit_null_blk
+
+	echo "Test complete"
+}
