@@ -1,0 +1,6 @@
+Running nvme/057
+91fdba0d-f87b-4c25-b80f-db7be1418b9e
+uuid.91fdba0d-f87b-4c25-b80f-db7be1418b9e
+ fio-XXXXX [XXX] .....    X.XXXXXX: nvme_setup_cmd: nvme: disk=X, qid=X, cmdid=X, nsid=X, flags=0x0, meta=0x0, cmd=(copy sdlba=X, nr_range=0, ctrl=0x0, dsmgmt=0, reftag=0)
+NQN:blktests-subsystem-1 disconnected 1 controller(s)
+Test complete

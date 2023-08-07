@@ -1,0 +1,3 @@
+Running nvme/051
+ fio-XXXXX [XXX] .....    X.XXXXXX: nvme_setup_cmd: nvme: disk=X, qid=X, cmdid=X, nsid=X, flags=0x0, meta=0x0, cmd=(copy sdlba=X, nr_range=0, ctrl=0x0, dsmgmt=0, reftag=0)
+Test complete

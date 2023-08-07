@@ -1,0 +1,29 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Run a multi copy offload IO using device copy offload on a device
+
+. tests/block/rc
+
+DESCRIPTION="run multi copy offload IO using device copy offload"
+
+requires() {
+	_have_fio && _have_tracefs && _have_tracepoint "nvme/nvme_setup_cmd"
+}
+
+device_requires() {
+	_require_test_dev_can_copy_offload
+}
+
+test_device () {
+	echo "Running ${TEST_NAME}"
+	local copy_hw_bytes
+
+	copy_hw_bytes=$(_test_dev_queue_get copy_max_hw_bytes)
+	_test_dev_queue_set "copy_max_bytes" "$copy_hw_bytes"
+
+	_fio_copy_verify_single_io "$TEST_DEV" 4096 "nvme/nvme_setup_cmd"
+	_fio_copy_verify_multi_io "$TEST_DEV"
+	echo "Test complete"
+}
