@@ -1,0 +1,25 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Run a single copy offload IO using block layer copy emulation on a device
+
+. tests/block/rc
+
+DESCRIPTION="run single copy offload IO using block layer copy emulation"
+
+requires() {
+	_have_fio && _have_tracefs && _have_tracepoint "nvme/nvme_setup_cmd"
+}
+
+device_requires() {
+	_have_copy_offload
+}
+
+test_device () {
+	echo "Running ${TEST_NAME}"
+	_test_dev_queue_set "copy_max_bytes" 0
+	_fio_copy_verify_single_io "$TEST_DEV" 4096 "nvme/nvme_setup_cmd"
+	_fio_copy_verify_single_io "$TEST_DEV" 1048576
+	echo "Test complete"
+}

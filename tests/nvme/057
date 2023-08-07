@@ -1,0 +1,67 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0+
+# Copyright (C) 2023 Nitesh Shetty
+#
+# Run a single copy offload IO using device copy offload,
+# for block device backed ns
+
+. tests/nvme/rc
+
+DESCRIPTION="run single copy offload (device offload) IO on NVMeOF block device-backed ns"
+
+requires() {
+	_nvme_requires
+	_have_fio && _have_loop
+	_require_nvme_trtype_is_fabrics
+}
+
+test() {
+	echo "Running ${TEST_NAME}"
+
+	_setup_nvmet
+
+	local port
+	local nvmedev
+	local loop_dev
+	local file_path="${TMPDIR}/img"
+	local subsys_name="blktests-subsystem-1"
+
+	truncate -s 1G "${file_path}"
+
+	loop_dev="$(losetup -f --show "${file_path}")"
+
+	_create_nvmet_subsystem "${subsys_name}" "${loop_dev}" \
+		"91fdba0d-f87b-4c25-b80f-db7be1418b9e"
+	port="$(_create_nvmet_port "${nvme_trtype}")"
+	_add_nvmet_subsys_to_port "${port}" "${subsys_name}"
+
+	_nvme_connect_subsys "${nvme_trtype}" "${subsys_name}"
+
+	nvmedev=$(_find_nvme_dev "${subsys_name}")
+	cat "/sys/block/${nvmedev}n1/uuid"
+	cat "/sys/block/${nvmedev}n1/wwid"
+
+
+	if [ -e "/sys/block/${nvmedev}n1/queue/copy_max_hw_bytes" ]; then
+		if [[ $(cat "/sys/block/${nvmedev}n1/queue/copy_max_hw_bytes") -gt 0 ]]; then
+			_fio_copy_verify_single_io "/dev/${nvmedev}n1" 4096 "nvme/nvme_setup_cmd"
+			_fio_copy_verify_single_io "/dev/${nvmedev}n1" 1048576
+		else
+			SKIP_REASONS+=("Device does not support copy offload")
+		fi
+	else
+		SKIP_REASONS+=("Kernel does not support copy offload")
+	fi
+
+	_nvme_disconnect_subsys "${subsys_name}"
+
+	_remove_nvmet_subsystem_from_port "${port}" "${subsys_name}"
+	_remove_nvmet_subsystem "${subsys_name}"
+	_remove_nvmet_port "${port}"
+
+	losetup -d "${loop_dev}"
+
+	rm "${file_path}"
+
+	echo "Test complete"
+}
