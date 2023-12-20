@@ -21,24 +21,12 @@ test() {
 
 	_setup_nvmet
 
-	local port
 	local nvmedev
-	local file_path
-	local file_path="${TMPDIR}/img"
-	local subsys_name="blktests-subsystem-1"
+	_nvmet_target_setup --blkdev file
 
-	truncate -s 1G "${file_path}"
-
-	_create_nvmet_subsystem "${subsys_name}" "${file_path}" \
-		"91fdba0d-f87b-4c25-b80f-db7be1418b9e"
-	port="$(_create_nvmet_port "${nvme_trtype}")"
-	_add_nvmet_subsys_to_port "${port}" "${subsys_name}"
-
-	_nvme_connect_subsys "${nvme_trtype}" "${subsys_name}"
-
-	nvmedev=$(_find_nvme_dev "${subsys_name}")
-	cat "/sys/block/${nvmedev}n1/uuid"
-	cat "/sys/block/${nvmedev}n1/wwid"
+	_nvme_connect_subsys "${nvme_trtype}" "${def_subsysnqn}"
+	nvmedev=$(_find_nvme_dev "${def_subsysnqn}")
+	_check_uuid "${nvmedev}"
 
 	if [ -e "/sys/block/${nvmedev}n1/queue/copy_max_hw_bytes" ]; then
 		echo 0 > /sys/block/"${nvmedev}n1"/queue/copy_max_bytes
@@ -48,13 +36,8 @@ test() {
 		SKIP_REASONS+=("Kernel does not support copy offload")
 	fi
 
-	_nvme_disconnect_subsys "${subsys_name}"
-
-	_remove_nvmet_subsystem_from_port "${port}" "${subsys_name}"
-	_remove_nvmet_subsystem "${subsys_name}"
-	_remove_nvmet_port "${port}"
-
-	rm "${file_path}"
+	_nvme_disconnect_subsys "${def_subsysnqn}"
+	_nvmet_target_cleanup
 
 	echo "Test complete"
 }

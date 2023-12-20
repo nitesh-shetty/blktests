@@ -235,8 +235,8 @@ filter_trace() {
 		-e "/entries-in-buffer/d" \
 		-e "s/  +/ /g" \
 		-e "s/fio-[0-9]+/fio-XXXXX/" \
-		-e "/nvme_cmd_copy|COPY_SRC/!d" \
-		-e "s/nvme_cmd_copy|COPY_SRC/copy/" \
+		-e "/nvme_cmd_copy|COPY_DST/!d" \
+		-e "s/nvme_cmd_copy|COPY_DST/copy/" \
 		-e "s/\[[0-9]+\]/[XXX]/" \
 		-e "s/\.{5}\s+/.....    /" \
 		-e "s/[0-9]+\.[0-9]+/X.XXXXXX/" \
